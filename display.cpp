@@ -40,7 +40,8 @@ namespace chip8
 	{
 		// Drawing assuming 8 wide sprites, with each bit representing a pixel
 		// (so a single uint8_t is one line of the sprite)
-		assert(x + 8 <= 64);
+		// Sprite may be placed overlapping the edge of the screen on the right hand side
+		assert(x < 64);
 		assert(y + height <= 32);
 
 		// Need to track if any bits were flipped

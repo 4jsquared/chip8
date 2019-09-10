@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <cstring>
 
+#include <iterator>
+
 namespace
 {
 	// Helpers for extracting information from opcodes
@@ -27,6 +29,130 @@ namespace
 	uint8_t OpValue(uint16_t opcode)
 	{
 		return opcode & 0x00FF;
+	};
+
+	constexpr uint8_t kCarryRegister = 0xF;
+	constexpr size_t kSpriteStart = 0x200;
+
+	// Built-in sprite - see http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#8xy6
+	struct BuiltinSprite
+	{
+		uint8_t data[5];
+	};
+
+	constexpr BuiltinSprite sBuiltinSprites[] = {
+		{
+			0b11110000,
+			0b10010000,
+			0b10010000,
+			0b10010000,
+			0b11110000,
+		},
+		{
+			0b00100000,
+			0b01100000,
+			0b00100000,
+			0b00100000,
+			0b01110000,
+		},
+		{
+			0b11110000,
+			0b00010000,
+			0b11110000,
+			0b10000000,
+			0b11110000,
+		},
+		{
+			0b11110000,
+			0b00010000,
+			0b11110000,
+			0b00010000,
+			0b11110000,
+		},
+		{
+			0b10010000,
+			0b10010000,
+			0b11110000,
+			0b00010000,
+			0b00010000,
+		},
+		{
+			0b11110000,
+			0b10000000,
+			0b10010000,
+			0b00010000,
+			0b11110000,
+		},
+		{
+			0b11110000,
+			0b10000000,
+			0b11110000,
+			0b10010000,
+			0b11110000,
+		},
+		{
+			0b11110000,
+			0b00010000,
+			0b00100000,
+			0b01000000,
+			0b01000000,
+		},
+		{
+			0b11110000,
+			0b10010000,
+			0b11110000,
+			0b10010000,
+			0b11110000,
+		},
+		{
+			0b11110000,
+			0b10010000,
+			0b11110000,
+			0b00010000,
+			0b11110000,
+		},
+		{
+			0b11110000,
+			0b10010000,
+			0b11110000,
+			0b10010000,
+			0b10010000,
+		},
+		{
+			0b11100000,
+			0b10010000,
+			0b11100000,
+			0b10010000,
+			0b11100000,
+		},
+		{
+			0b11110000,
+			0b10000000,
+			0b10000000,
+			0b10000000,
+			0b11110000,
+		},
+		{
+			0b11100000,
+			0b10010000,
+			0b10010000,
+			0b10010000,
+			0b11100000,
+		},
+		{
+			0b11110000,
+			0b10000000,
+			0b11110000,
+			0b10000000,
+			0b11110000,
+		},
+		{
+			0b11110000,
+			0b10000000,
+			0b11110000,
+			0b10000000,
+			0b10000000,
+		},
 	};
 }
 
@@ -59,57 +185,57 @@ namespace chip8
 	{
 		switch ((opcode & 0xF000) >> 12)
 		{
-			case 0x0: // Functions
-				ExecuteOpcode0(opcode);
-				break;
-			case 0x1: // 1NNN: Jump to NNN
-				mProgramCounter = OpAddress(opcode);
-				break;
-			case 0x2: // 2NNN: Call NNN
-				// Only the program counter is saved, the registers are ignored
-				mStack.push_back(mProgramCounter);
-				mProgramCounter = opcode & 0x0FFF;
-				break;
-			case 0x3: // 3XNN: Skip if register X equal NN
-				if (mRegister[OpRegisterX(opcode)] == OpValue(opcode))
-					mProgramCounter += 2;
-				break;
-			case 0x4: // 4XNN: Skip if register X not equal NN
-				if (mRegister[OpRegisterX(opcode)] != OpValue(opcode))
-					mProgramCounter += 2;
-				break;
-			case 0x5: // 5XYN: Skip if register X equals register Y
-				assert((opcode & 0x000F) == 0); // What would this mean?
-				if (mRegister[OpRegisterX(opcode)] == mRegister[OpRegisterY(opcode)])
-					mProgramCounter += 2;
-				break;
-			case 0x6: // 6XNN: register X = NN
-				mRegister[OpRegisterX(opcode)] = OpValue(opcode);
-				break;
-			case 0x7: // 7XNN: register X += NN, no carry
-				mRegister[OpRegisterX(opcode)] += OpValue(opcode);
-				break;
-			case 0x8: // 8XYN: Two register operations
-				ExecuteOpcode8(opcode);
-				break;
-			case 0xA: // ANNN: Mem register = NNN
-				mAddressRegister = OpAddress(opcode);
-				break;
-			case 0xB: // BNNN: Jump to v0 + NNN
-				mProgramCounter = mRegister[0] + OpAddress(opcode);
-				break;
-			case 0xC: // CXNN: Register X = rand & NN
-				mRegister[OpRegisterX(opcode)] = rand() & OpValue(opcode);
-				break;
-			case 0xD:
-				ExecuteOpcodeD(opcode);
-				break;
-			case 0xE:
-				assert(false); // TODO
-				break;
-			case 0xF:
-				ExecuteOpcodeF(opcode);
-				break;
+		case 0x0: // Functions
+			ExecuteOpcode0(opcode);
+			break;
+		case 0x1: // 1NNN: Jump to NNN
+			mProgramCounter = OpAddress(opcode);
+			break;
+		case 0x2: // 2NNN: Call NNN
+			// Only the program counter is saved, the registers are ignored
+			mStack.push_back(mProgramCounter);
+			mProgramCounter = opcode & 0x0FFF;
+			break;
+		case 0x3: // 3XNN: Skip if register X equal NN
+			if (mRegister[OpRegisterX(opcode)] == OpValue(opcode))
+				mProgramCounter += 2;
+			break;
+		case 0x4: // 4XNN: Skip if register X not equal NN
+			if (mRegister[OpRegisterX(opcode)] != OpValue(opcode))
+				mProgramCounter += 2;
+			break;
+		case 0x5: // 5XYN: Skip if register X equals register Y
+			assert((opcode & 0x000F) == 0); // What would this mean?
+			if (mRegister[OpRegisterX(opcode)] == mRegister[OpRegisterY(opcode)])
+				mProgramCounter += 2;
+			break;
+		case 0x6: // 6XNN: register X = NN
+			mRegister[OpRegisterX(opcode)] = OpValue(opcode);
+			break;
+		case 0x7: // 7XNN: register X += NN, no carry
+			mRegister[OpRegisterX(opcode)] += OpValue(opcode);
+			break;
+		case 0x8: // 8XYN: Two register operations
+			ExecuteOpcode8(opcode);
+			break;
+		case 0xA: // ANNN: Mem register = NNN
+			mAddressRegister = OpAddress(opcode);
+			break;
+		case 0xB: // BNNN: Jump to v0 + NNN
+			mProgramCounter = mRegister[0] + OpAddress(opcode);
+			break;
+		case 0xC: // CXNN: Register X = rand & NN
+			mRegister[OpRegisterX(opcode)] = rand() & OpValue(opcode);
+			break;
+		case 0xD:
+			ExecuteOpcodeD(opcode);
+			break;
+		case 0xE:
+			ExecuteOpcodeE(opcode);
+			break;
+		case 0xF:
+			ExecuteOpcodeF(opcode);
+			break;
 		}
 	}
 
@@ -119,17 +245,17 @@ namespace chip8
 
 		switch (opcode)
 		{
-			case 0x00E0: // Clear the display
-				mDisplay.Clear();
-				break;
-			case 0x00EE: // Return
-				assert(!mStack.empty());
-				mProgramCounter = mStack.back();
-				mStack.pop_back();
-				break;
-			default: // Old machine codes, not needed for interpreting the program?
-				LOG("Ignoring opcode %u", opcode);
-				break;
+		case 0x00E0: // Clear the display
+			mDisplay.Clear();
+			break;
+		case 0x00EE: // Return
+			assert(!mStack.empty());
+			mProgramCounter = mStack.back();
+			mStack.pop_back();
+			break;
+		default: // Old machine codes, not needed for interpreting the program?
+			LOG("Ignoring opcode %u", opcode);
+			break;
 		}
 	}
 
@@ -144,57 +270,57 @@ namespace chip8
 
 		switch (opcode & 0xF)
 		{
-			case 0x0: // 8XY0: register X = register Y
-				regX = regY;
-				break;
-			case 0x1: // 8XY1: register X |= register Y
-				regX |= regY;
-				break;
-			case 0x2: // 8XY2: register X &= register Y
-				regX &= regY;
-				break;
-			case 0x3: // 8XY3: register X ^= register Y
-				regX ^= regY;
-				break;
-			case 0x4: // 8XY4: register X += register Y, with carry
-			{
-				assert(!xOrYIsCarry); // What happens if the carry register is also one of the register being used?
-				uint16_t result = static_cast<uint16_t>(regX) + static_cast<uint16_t>(regY);
-				regX = static_cast<uint8_t>(result & 0xFF);
-				mRegister[kCarryRegister] = result > 0xFF ? 1 : 0;
-			}
-				break;
-			case 0x5: // 8XY5: register X -= register Y, carry = !borrow
-			{
-				assert(!xOrYIsCarry); // What happens if the carry register is also one of the register being used?
-				uint16_t result = static_cast<uint16_t>(regX) - static_cast<uint16_t>(regY);
-				regX = static_cast<uint8_t>(result & 0xFF);
-				mRegister[kCarryRegister] = result > 0xFF ? 0 : 1;
-			}
-				break;
-			case 0x6: // 8XY6: register X >>= 1, carry = register X & 1;
-				assert(OpRegisterX(opcode) == OpRegisterY(opcode));
-				assert(!xOrYIsCarry);
-				mRegister[kCarryRegister] = regX & 0x1;
-				regX >>= 1;
-				break;
-			case 0x7: // 8XY7: register X = register Y - register X, carry = !borrow
-			{
-				assert(!xOrYIsCarry);
-				uint16_t result = static_cast<uint16_t>(regX) - static_cast<uint16_t>(regY);
-				regX = static_cast<uint8_t>(result & 0xFF);
-				mRegister[kCarryRegister] = result > 0xFF ? 0 : 1;
-			}
-				break;
-			case 0xE: // 8XYE: register X <<= 1, carry = register X highest bit;
-				assert((opcode & 0x000) == 0);
-				assert(!xOrYIsCarry);
-				mRegister[kCarryRegister] = regX >> 7;
-				regX <<= 1;
-				break;
-			default:
-				assert(false); // TODO
-				break;
+		case 0x0: // 8XY0: register X = register Y
+			regX = regY;
+			break;
+		case 0x1: // 8XY1: register X |= register Y
+			regX |= regY;
+			break;
+		case 0x2: // 8XY2: register X &= register Y
+			regX &= regY;
+			break;
+		case 0x3: // 8XY3: register X ^= register Y
+			regX ^= regY;
+			break;
+		case 0x4: // 8XY4: register X += register Y, with carry
+		{
+			assert(!xOrYIsCarry); // What happens if the carry register is also one of the register being used?
+			uint16_t result = static_cast<uint16_t>(regX) + static_cast<uint16_t>(regY);
+			regX = static_cast<uint8_t>(result & 0xFF);
+			mRegister[kCarryRegister] = result > 0xFF ? 1 : 0;
+		}
+		break;
+		case 0x5: // 8XY5: register X -= register Y, carry = !borrow
+		{
+			assert(!xOrYIsCarry); // What happens if the carry register is also one of the register being used?
+			uint16_t result = static_cast<uint16_t>(regX) - static_cast<uint16_t>(regY);
+			regX = static_cast<uint8_t>(result & 0xFF);
+			mRegister[kCarryRegister] = result > 0xFF ? 0 : 1;
+		}
+		break;
+		case 0x6: // 8XY6: register X >>= 1, carry = register X & 1;
+			assert(OpRegisterX(opcode) == OpRegisterY(opcode));
+			assert(!xOrYIsCarry);
+			mRegister[kCarryRegister] = regX & 0x1;
+			regX >>= 1;
+			break;
+		case 0x7: // 8XY7: register X = register Y - register X, carry = !borrow
+		{
+			assert(!xOrYIsCarry);
+			uint16_t result = static_cast<uint16_t>(regX) - static_cast<uint16_t>(regY);
+			regX = static_cast<uint8_t>(result & 0xFF);
+			mRegister[kCarryRegister] = result > 0xFF ? 0 : 1;
+		}
+		break;
+		case 0xE: // 8XYE: register X <<= 1, carry = register X highest bit;
+			assert((opcode & 0x000) == 0);
+			assert(!xOrYIsCarry);
+			mRegister[kCarryRegister] = regX >> 7;
+			regX <<= 1;
+			break;
+		default:
+			assert(false); // TODO
+			break;
 		}
 	}
 
@@ -216,6 +342,28 @@ namespace chip8
 		mRegister[kCarryRegister] = flipped ? 1 : 0;
 	}
 
+	void Program::ExecuteOpcodeE(uint16_t opcode)
+	{
+		// EXNN - Functions using one register
+		assert((opcode & 0xF000) == 0xE000);
+
+		uint8_t registerIndex = OpRegisterX(opcode);
+
+		switch (opcode & 0xFF)
+		{
+		case 0x9E: // EX9E - Skip if key in VX is pressed
+			// Skip for now, assuming no input
+			break;
+		case 0xA1: // EX9E - Skip if key in VX isn't pressed
+			// Skip for now, assuming no input
+			mProgramCounter += 2;
+			break;
+		default:
+			assert(false); // TODO
+			break;
+		}
+	}
+
 	void Program::ExecuteOpcodeF(uint16_t opcode)
 	{
 		// FXNN - Functions using one register
@@ -225,11 +373,27 @@ namespace chip8
 
 		switch (opcode & 0xFF)
 		{
+		case 0x07: // FX07 - Get the delay timer to register X
+			mRegister[registerIndex] = mDelayTimer.GetValue();
+			break;
+		case 0x15: // FX15 - Set the delay timer to register X
+			mDelayTimer.SetValue(mRegister[registerIndex]);
+			break;
+		case 0x18: // FX18 - Set the sound timer to register X
+			mSoundTimer.SetValue(mRegister[registerIndex]);
+			break;
+		case 0x29: // FX29 - Set address register to sprite for character in register X
+		{
+			uint8_t value = mRegister[registerIndex];
+			assert(value < std::size(sBuiltinSprites));
+			mAddressRegister = kSpriteStart + sizeof(BuiltinSprite) * value;
+		}
+			break;
 		case 0x33: // FX33 - Dump BCD encoding to memory, most signifcant first
 			assert(mAddressRegister + 3 <= kMemoryNumBytes);
-			mMemory[mAddressRegister]     = (mRegister[registerIndex] / 100);
+			mMemory[mAddressRegister] = (mRegister[registerIndex] / 100);
 			mMemory[mAddressRegister + 1] = (mRegister[registerIndex] / 10) % 10;
-			mMemory[mAddressRegister + 2] =  mRegister[registerIndex] % 10;
+			mMemory[mAddressRegister + 2] = mRegister[registerIndex] % 10;
 			break;
 		case 0x55: // FX55 - Dump registers 0 to X (inclusive) to memory
 			assert(mAddressRegister + registerIndex < kMemoryNumBytes);
@@ -243,4 +407,5 @@ namespace chip8
 			assert(false); // TODO
 			break;
 		}
-	}}
+	}
+}

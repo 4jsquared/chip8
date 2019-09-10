@@ -2,6 +2,7 @@
 #define CHIP8_PROGRAM_H
 
 #include "display.h"
+#include "timer.h"
 
 #include <cstddef>
 #include <vector>
@@ -23,6 +24,7 @@ namespace chip8
 		void ExecuteOpcode0(uint16_t opcode);
 		void ExecuteOpcode8(uint16_t opcode);
 		void ExecuteOpcodeD(uint16_t opcode);
+		void ExecuteOpcodeE(uint16_t opcode);
 		void ExecuteOpcodeF(uint16_t opcode);
 
 	private:
@@ -43,6 +45,10 @@ namespace chip8
 
 		// Stack
 		std::vector<uint16_t> mStack;
+
+		// Timers
+		Timer mDelayTimer;
+		Timer mSoundTimer; // TODO - this needs to set off a bell when it hits 0
 	};
 }
 
