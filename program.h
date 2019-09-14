@@ -2,22 +2,32 @@
 #define CHIP8_PROGRAM_H
 
 #include "display.h"
+#include "image.h"
+#include "process.h"
 #include "timer.h"
 
 #include <cstddef>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 namespace chip8
 {
-	class Program
+	class Program : public Process
 	{
 		// See https://en.wikipedia.org/wiki/CHIP-8
 	public:
-		Program(const void* data, size_t numBytes);
+		Program(Image&& image);
 
-		void Execute();
+		void Render(SDL_Renderer* renderer) override;
+		bool Finished() override { return false; };
+
+		void OnKeyDown(const SDL_Keysym& keysym) override;
+		void OnKeyUp(const SDL_Keysym& keysym) override;
 
 	private:
+		void Execute();
+
 		void ExecuteOpcode(uint16_t opcode);
 
 		// Sub categories of opcodes
@@ -29,19 +39,21 @@ namespace chip8
 
 	private:
 		// System
+		std::mutex mDisplayMutex;
 		Display mDisplay;
 
+		// Execution
+		std::thread mThread;
+
 		// Memory
-		static constexpr size_t kMemoryNumBytes = 4 * 1024;
-		static constexpr size_t kProgramStart = 0x200;
-		uint8_t mMemory[kMemoryNumBytes] = {};
+		Image mImage;
 
 		// Registers
-		static constexpr size_t kNumRegisters = 16;
+		static constexpr size_t  kNumRegisters  = 16;
 		static constexpr uint8_t kCarryRegister = 0xF;
-		uint8_t mRegister[kNumRegisters] = {};
-		uint16_t mAddressRegister = 0;
-		uint16_t mProgramCounter = kProgramStart;
+		uint8_t  mRegister[kNumRegisters] = {};
+		uint16_t mAddressRegister         = 0;
+		uint16_t mProgramCounter          = 0;
 
 		// Stack
 		std::vector<uint16_t> mStack;

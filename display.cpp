@@ -1,41 +1,10 @@
 #include "display.h"
 
 #include <algorithm>
-
 #include <cassert>
-#include <cstdio>
-
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <Windows.h>
-#endif
-
-namespace
-{
-	constexpr char kResetToOrigin[] = "\x1b[1;1f";
-}
 
 namespace chip8
 {
-	Display::Display()
-	{
-#ifdef _WIN32
-		// Enable control sequences
-		// See https://docs.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
-		HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
-		assert(console != INVALID_HANDLE_VALUE);
-
-		DWORD mode = 0;
-		BOOL result = GetConsoleMode(console, &mode);
-		assert(result == TRUE);
-
-		mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-		result = SetConsoleMode(console, mode);
-		assert(result == TRUE);
-#endif
-	}
-
 	bool Display::Draw(uint8_t x, uint8_t y, uint8_t height, const uint8_t* data)
 	{
 		// Drawing assuming 8 wide sprites, with each bit representing a pixel
@@ -55,8 +24,6 @@ namespace chip8
 			mRows[y + row] ^= newData;
 		}
 
-		Update();
-
 		return flipped;
 	}
 
@@ -64,33 +31,40 @@ namespace chip8
 	{
 		// Clear the display
 		std::fill(std::begin(mRows), std::end(mRows), 0);
-
-		Update();
 	}
 
-	void Display::Update()
+	void Display::Render(SDL_Renderer* renderer)
 	{
-		// Reset to the start origin
-#ifdef _WIN32
-		HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
-		WriteConsole(console, kResetToOrigin, sizeof(kResetToOrigin) - 1, nullptr, nullptr);
-#else
-		printf(kResetToOrigin);
-#endif
+		// Clear anything on the display
+		int result = SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+		assert(result == 0);
+		result = SDL_RenderClear(renderer);
+		assert(result == 0);
 
-		// Print rows
-		for (uint64_t rowData : mRows)
+		// Check how much space we have
+		int width, height;
+		result = SDL_GetRendererOutputSize(renderer, &width, &height);
+		assert(result == 0);
+		int pixelWidth = width / kWidth;
+		int pixelHeight = height / kHeight;
+
+		// Draw display
+		result = SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
+		assert(result == 0);
+		for (size_t row = 0; row < kHeight; row++)
 		{
-			char buffer[66] = {};
-			for (size_t i = 0; i < 64; i++)
-				buffer[i] = (rowData & (1ull << (63 - i))) ? '#' : ' ';
-			buffer[64] = '\n';
-
-#ifdef _WIN32
-			WriteConsole(console, buffer, sizeof(buffer) - 1, nullptr, nullptr);
-#else
-			printf(buffer);
-#endif
+			uint64_t mask = 0x1ull << 63;
+			for (size_t col = 0; col < kWidth; col++)
+			{
+				if (mask & mRows[row])
+				{
+					SDL_Rect rect{ col * pixelWidth, row * pixelHeight, pixelWidth, pixelHeight };
+					result = SDL_RenderFillRect(renderer, &rect);
+					assert(result == 0);
+				}
+				mask >>= 1;
+			}
 		}
+
 	}
 }

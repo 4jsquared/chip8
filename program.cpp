@@ -30,148 +30,42 @@ namespace
 	{
 		return opcode & 0x00FF;
 	};
-
-	constexpr uint8_t kCarryRegister = 0xF;
-	constexpr size_t kSpriteStart = 0x200;
-
-	// Built-in sprite - see http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#8xy6
-	struct BuiltinSprite
-	{
-		uint8_t data[5];
-	};
-
-	constexpr BuiltinSprite sBuiltinSprites[] = {
-		{
-			0b11110000,
-			0b10010000,
-			0b10010000,
-			0b10010000,
-			0b11110000,
-		},
-		{
-			0b00100000,
-			0b01100000,
-			0b00100000,
-			0b00100000,
-			0b01110000,
-		},
-		{
-			0b11110000,
-			0b00010000,
-			0b11110000,
-			0b10000000,
-			0b11110000,
-		},
-		{
-			0b11110000,
-			0b00010000,
-			0b11110000,
-			0b00010000,
-			0b11110000,
-		},
-		{
-			0b10010000,
-			0b10010000,
-			0b11110000,
-			0b00010000,
-			0b00010000,
-		},
-		{
-			0b11110000,
-			0b10000000,
-			0b10010000,
-			0b00010000,
-			0b11110000,
-		},
-		{
-			0b11110000,
-			0b10000000,
-			0b11110000,
-			0b10010000,
-			0b11110000,
-		},
-		{
-			0b11110000,
-			0b00010000,
-			0b00100000,
-			0b01000000,
-			0b01000000,
-		},
-		{
-			0b11110000,
-			0b10010000,
-			0b11110000,
-			0b10010000,
-			0b11110000,
-		},
-		{
-			0b11110000,
-			0b10010000,
-			0b11110000,
-			0b00010000,
-			0b11110000,
-		},
-		{
-			0b11110000,
-			0b10010000,
-			0b11110000,
-			0b10010000,
-			0b10010000,
-		},
-		{
-			0b11100000,
-			0b10010000,
-			0b11100000,
-			0b10010000,
-			0b11100000,
-		},
-		{
-			0b11110000,
-			0b10000000,
-			0b10000000,
-			0b10000000,
-			0b11110000,
-		},
-		{
-			0b11100000,
-			0b10010000,
-			0b10010000,
-			0b10010000,
-			0b11100000,
-		},
-		{
-			0b11110000,
-			0b10000000,
-			0b11110000,
-			0b10000000,
-			0b11110000,
-		},
-		{
-			0b11110000,
-			0b10000000,
-			0b11110000,
-			0b10000000,
-			0b10000000,
-		},
-	};
 }
 
 namespace chip8
 {
-	Program::Program(const void* data, size_t numBytes)
+	Program::Program(Image&& image)
+		: mImage(std::move(image))
 	{
-		// Programs expect to be at kProgramStart, since
-		// this affects opcodes such as jump or call
-		assert(kProgramStart + numBytes < kMemoryNumBytes);
-		memcpy(mMemory + kProgramStart, data, numBytes);
+		mProgramCounter = mImage.StartOffset();
+
+		// Start execution on another thread
+		mThread = std::thread([this]() {
+			Execute();
+		});
+	}
+
+	void Program::Render(SDL_Renderer* renderer)
+	{
+		std::unique_lock<std::mutex> lock(mDisplayMutex);
+		mDisplay.Render(renderer);
+	}
+
+	void Program::OnKeyDown(const SDL_Keysym& keysym)
+	{
+
+	}
+
+	void Program::OnKeyUp(const SDL_Keysym& keysym)
+	{
+
 	}
 
 	void Program::Execute()
 	{
 		while (true)
 		{
-			assert(mProgramCounter < kMemoryNumBytes);
-			uint16_t opcode = (static_cast<uint16_t>(mMemory[mProgramCounter]) << 8) + mMemory[mProgramCounter + 1];
+			uint16_t opcode = (static_cast<uint16_t>(mImage[mProgramCounter]) << 8) + mImage[mProgramCounter + 1];
 
 			// Move the program counter so that it points to the next operation.
 			// Individual opcodes such as jump or call may change this.
@@ -246,7 +140,10 @@ namespace chip8
 		switch (opcode)
 		{
 		case 0x00E0: // Clear the display
+		{
+			std::unique_lock<std::mutex> lock(mDisplayMutex);
 			mDisplay.Clear();
+		}
 			break;
 		case 0x00EE: // Return
 			assert(!mStack.empty());
@@ -335,8 +232,13 @@ namespace chip8
 		uint8_t x = mRegister[OpRegisterX(opcode)];
 		uint8_t y = mRegister[OpRegisterY(opcode)];
 
-		assert(mAddressRegister + height * width < sizeof(mMemory));
-		bool flipped = mDisplay.Draw(x, y, height, &mMemory[mAddressRegister]);
+		assert(mAddressRegister + height * width < sizeof(mImage));
+
+		bool flipped = false;
+		{
+			std::unique_lock<std::mutex> lock(mDisplayMutex);
+			flipped = mDisplay.Draw(x, y, height, &mImage[mAddressRegister]);
+		}
 
 		// The carry bit is set depending on whether any pixels were turned off
 		mRegister[kCarryRegister] = flipped ? 1 : 0;
@@ -385,23 +287,19 @@ namespace chip8
 		case 0x29: // FX29 - Set address register to sprite for character in register X
 		{
 			uint8_t value = mRegister[registerIndex];
-			assert(value < std::size(sBuiltinSprites));
-			mAddressRegister = kSpriteStart + sizeof(BuiltinSprite) * value;
+			mAddressRegister = mImage.SpriteOffset(value);
 		}
 			break;
 		case 0x33: // FX33 - Dump BCD encoding to memory, most signifcant first
-			assert(mAddressRegister + 3 <= kMemoryNumBytes);
-			mMemory[mAddressRegister] = (mRegister[registerIndex] / 100);
-			mMemory[mAddressRegister + 1] = (mRegister[registerIndex] / 10) % 10;
-			mMemory[mAddressRegister + 2] = mRegister[registerIndex] % 10;
+			mImage[mAddressRegister] = (mRegister[registerIndex] / 100);
+			mImage[mAddressRegister + 1] = (mRegister[registerIndex] / 10) % 10;
+			mImage[mAddressRegister + 2] = mRegister[registerIndex] % 10;
 			break;
 		case 0x55: // FX55 - Dump registers 0 to X (inclusive) to memory
-			assert(mAddressRegister + registerIndex < kMemoryNumBytes);
-			std::copy_n(mRegister, registerIndex + 1, &mMemory[mAddressRegister]);
+			std::copy_n(mRegister, registerIndex + 1, &mImage[mAddressRegister]);
 			break;
 		case 0x65: // FX65 - Load registers 0 to X (inclusive) to memory
-			assert(mAddressRegister + registerIndex < kMemoryNumBytes);
-			std::copy_n(&mMemory[mAddressRegister], registerIndex + 1, mRegister);
+			std::copy_n(&mImage[mAddressRegister], registerIndex + 1, mRegister);
 			break;
 		default:
 			assert(false); // TODO
