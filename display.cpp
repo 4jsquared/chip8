@@ -19,7 +19,13 @@ namespace chip8
 		// Drawing occurs by flipping the state of each affected bit
 		for (uint8_t row = 0; row < height; row++)
 		{
-			uint64_t newData = static_cast<uint64_t>(data[row]) << (64 - 8 - x);
+			uint8_t shiftUp = (128 - 8 - x) % 64;
+			uint8_t shiftDown = (8 + x) % 64;
+			uint64_t newData = static_cast<uint64_t>(data[row]) << shiftUp;
+
+			// Wrap around on overflow
+			newData |= static_cast<uint64_t>(data[row]) >> shiftDown;
+
 			flipped |= static_cast<bool>(mRows[y + row] & newData);
 			mRows[y + row] ^= newData;
 		}
