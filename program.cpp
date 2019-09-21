@@ -30,6 +30,9 @@ namespace
 	{
 		return opcode & 0x00FF;
 	};
+
+	// Operates at 500 hz
+	auto kOpcodeDuration = std::chrono::milliseconds(2);
 }
 
 namespace chip8
@@ -38,16 +41,20 @@ namespace chip8
 		: mImage(std::move(image))
 	{
 		mProgramCounter = mImage.StartOffset();
-
-		// Start execution on another thread
-		mThread = std::thread([this]() {
-			Execute();
-		});
+		mLastExecution = std::chrono::system_clock::now();
 	}
 
 	void Program::Render(SDL_Renderer* renderer)
 	{
-		std::unique_lock<std::mutex> lock(mDisplayMutex);
+		auto executionTime = std::chrono::system_clock::now();
+		auto executionDuration = executionTime - mLastExecution;
+		uint32_t opcodeCount = executionDuration / kOpcodeDuration;
+
+		// Increment only by the amount of opcodes we've executed
+		mLastExecution += opcodeCount * kOpcodeDuration;
+
+		Execute(opcodeCount);
+
 		mDisplay.Render(renderer);
 	}
 
@@ -61,9 +68,9 @@ namespace chip8
 
 	}
 
-	void Program::Execute()
+	void Program::Execute(uint32_t opcodeCount)
 	{
-		while (true)
+		for (uint32_t i = 0; i < opcodeCount; i++)
 		{
 			uint16_t opcode = (static_cast<uint16_t>(mImage[mProgramCounter]) << 8) + mImage[mProgramCounter + 1];
 
@@ -140,10 +147,7 @@ namespace chip8
 		switch (opcode)
 		{
 		case 0x00E0: // Clear the display
-		{
-			std::unique_lock<std::mutex> lock(mDisplayMutex);
 			mDisplay.Clear();
-		}
 			break;
 		case 0x00EE: // Return
 			assert(!mStack.empty());
@@ -234,11 +238,7 @@ namespace chip8
 
 		assert(mAddressRegister + height * width < sizeof(mImage));
 
-		bool flipped = false;
-		{
-			std::unique_lock<std::mutex> lock(mDisplayMutex);
-			flipped = mDisplay.Draw(x, y, height, &mImage[mAddressRegister]);
-		}
+		bool flipped = mDisplay.Draw(x, y, height, &mImage[mAddressRegister]);
 
 		// The carry bit is set depending on whether any pixels were turned off
 		mRegister[kCarryRegister] = flipped ? 1 : 0;

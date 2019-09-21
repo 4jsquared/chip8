@@ -7,8 +7,6 @@
 #include "timer.h"
 
 #include <cstddef>
-#include <mutex>
-#include <thread>
 #include <vector>
 
 namespace chip8
@@ -26,7 +24,7 @@ namespace chip8
 		void OnKeyUp(const SDL_Keysym& keysym) override;
 
 	private:
-		void Execute();
+		void Execute(uint32_t opcodeCount);
 
 		void ExecuteOpcode(uint16_t opcode);
 
@@ -39,11 +37,8 @@ namespace chip8
 
 	private:
 		// System
-		std::mutex mDisplayMutex;
 		Display mDisplay;
-
-		// Execution
-		std::thread mThread;
+		std::chrono::system_clock::time_point mLastExecution;
 
 		// Memory
 		Image mImage;
