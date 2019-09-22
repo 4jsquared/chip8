@@ -60,12 +60,12 @@ namespace chip8
 
 	void Program::OnKeyDown(const SDL_Keysym& keysym)
 	{
-
+		mKeyboard.OnKeyDown(keysym);
 	}
 
 	void Program::OnKeyUp(const SDL_Keysym& keysym)
 	{
-
+		mKeyboard.OnKeyUp(keysym);
 	}
 
 	void Program::Execute(uint32_t opcodeCount)
@@ -254,11 +254,12 @@ namespace chip8
 		switch (opcode & 0xFF)
 		{
 		case 0x9E: // EX9E - Skip if key in VX is pressed
-			// Skip for now, assuming no input
+			if (mKeyboard.GetKeyState(mRegister[registerIndex]))
+				mProgramCounter += 2;
 			break;
 		case 0xA1: // EX9E - Skip if key in VX isn't pressed
-			// Skip for now, assuming no input
-			mProgramCounter += 2;
+			if (!mKeyboard.GetKeyState(mRegister[registerIndex]))
+				mProgramCounter += 2;
 			break;
 		default:
 			assert(false); // TODO

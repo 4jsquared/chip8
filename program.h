@@ -3,6 +3,7 @@
 
 #include "display.h"
 #include "image.h"
+#include "keyboard.h"
 #include "process.h"
 #include "timer.h"
 
@@ -38,6 +39,7 @@ namespace chip8
 	private:
 		// System
 		Display mDisplay;
+		Keyboard mKeyboard;
 		std::chrono::system_clock::time_point mLastExecution;
 
 		// Memory

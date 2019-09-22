@@ -13,6 +13,7 @@ add_executable (chip8 WIN32
 	"chip8.cpp"
 	"display.cpp"
 	"image.cpp"
+	"keyboard.cpp"
 	"program.cpp"
 	"program_select.cpp"
 	"system.cpp"
