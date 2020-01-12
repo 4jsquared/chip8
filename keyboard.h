@@ -21,4 +21,4 @@ namespace chip8
 	};
 }
 
-#endif // CHIP8_DISPLAY_H
+#endif // CHIP8_KEYBOARD_H

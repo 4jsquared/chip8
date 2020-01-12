@@ -16,6 +16,7 @@ add_executable (chip8 WIN32
 	"keyboard.cpp"
 	"program.cpp"
 	"program_select.cpp"
+	"sound_timer.cpp"
 	"system.cpp"
 	"timer.cpp"
 	)

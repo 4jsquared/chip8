@@ -5,6 +5,7 @@
 #include "image.h"
 #include "keyboard.h"
 #include "process.h"
+#include "sound_timer.h"
 #include "timer.h"
 
 #include <cstddef>
@@ -57,7 +58,7 @@ namespace chip8
 
 		// Timers
 		Timer mDelayTimer;
-		Timer mSoundTimer; // TODO - this needs to set off a bell when it hits 0
+		SoundTimer mSoundTimer; // TODO - this needs to set off a bell when it hits 0
 	};
 }
 
