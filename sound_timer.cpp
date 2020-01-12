@@ -21,6 +21,9 @@ namespace chip8
 		assert(obtainedSpec.format == AUDIO_F32SYS);
 		assert(obtainedSpec.channels == 1);
 
+		// Record data for later use
+		mDeviceFrequency = obtainedSpec.freq;
+
 		// Let's create a 100Hz-ish sawtooth
 		size_t numSamples = obtainedSpec.freq / 100;
 		mWaveform.reserve(numSamples);
@@ -28,6 +31,9 @@ namespace chip8
 		{
 			mWaveform.push_back(2.f * static_cast<float>(sample) / (numSamples - 1) - 1.f);
 		}
+
+		// Start the audio device
+		SDL_PauseAudioDevice(mDevice, false);
 	}
 
 	SoundTimer::~SoundTimer()
@@ -37,25 +43,8 @@ namespace chip8
 
 	void SoundTimer::SetValue(uint8_t value)
 	{
-		// Remove any timer that might also try to alter audio state
-		if (mTimer)
-		{
-			SDL_RemoveTimer(mTimer);
-			mTimer = 0;
-		}
-
-		SDL_PauseAudioDevice(mDevice, value == 0);
-
-		if (value > 0)
-		{
-			// Value is decremented at a frequency of 60Hz - on running out, the buzzer stops
-			mTimer = SDL_AddTimer(value * 1000 / 60, [](Uint32 interval, void * soundObject) -> Uint32
-			{
-				SDL_PauseAudioDevice(reinterpret_cast<SoundTimer*>(soundObject)->mDevice, true);
-				return 0;
-			}, this);
-			assert(mTimer != 0);
-		}
+		// Value is the number of 1/60s to play for, i.e. the timer decrements at 60Hz
+		mRemainingSamples.store(value * mDeviceFrequency / 60);
 	}
 
 	void SoundTimer::RenderCallback(void * soundObject, Uint8 * buffer, int bufferLen)
@@ -72,30 +61,42 @@ namespace chip8
 
 	void SoundTimer::Render(float * buffer, size_t bufferLen)
 	{
-		size_t srcOffset = mWaveformOffset;
 		size_t dstOffset = 0;
-		size_t copyCount = mWaveform.size() - srcOffset;
+		size_t srcOffset = mWaveformOffset;
+
+		uint32_t remainingSamples, finalRemainingSamples;
+		do
+		{
+			remainingSamples = mRemainingSamples.load(std::memory_order_relaxed);
+			finalRemainingSamples = remainingSamples > bufferLen ? remainingSamples - bufferLen : 0;
+		} while (mRemainingSamples.compare_exchange_weak(remainingSamples, finalRemainingSamples) == false);
 
 		while (dstOffset < bufferLen)
 		{
-			// Check that the copied data will fit - reduce if not
-			// Don't forget to update the offset for the next time around
-			size_t dstCount = bufferLen - dstOffset;
-			if (copyCount > dstCount)
+			if (remainingSamples > 0)
 			{
-				mWaveformOffset = mWaveform.size() - (copyCount - dstCount);
-				copyCount = dstCount;
+				size_t copyCount = std::min({
+					mWaveform.size() - srcOffset,
+					static_cast<size_t>(remainingSamples),
+					bufferLen - dstOffset
+					});
+
+				std::copy_n(mWaveform.begin() + srcOffset, copyCount, buffer + dstOffset);
+
+				dstOffset += copyCount;
+				remainingSamples -= copyCount;
+				srcOffset += copyCount;
+				srcOffset %= mWaveform.size();
 			}
 			else
 			{
-				mWaveformOffset = 0;
+				// Buzzer has stopped, fill with silence
+				std::fill_n(buffer + dstOffset, bufferLen - dstOffset, 0.f);
+				break;
 			}
-
-			std::copy_n(mWaveform.begin() + srcOffset, copyCount, buffer + dstOffset);
-
-			dstOffset += copyCount;
-			srcOffset = 0;
-			copyCount = mWaveform.size();
 		}
+
+		// Update the offset for next time
+		mWaveformOffset = remainingSamples > 0 ? srcOffset : 0;
 	}
 }

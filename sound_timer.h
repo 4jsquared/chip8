@@ -3,6 +3,8 @@
 
 #include "SDL.h"
 
+#include <atomic>
+#include <chrono>
 #include <vector>
 
 namespace chip8
@@ -23,8 +25,9 @@ namespace chip8
 		void Render(float * buffer, size_t bufferLen);
 
 	private:
-		SDL_AudioDeviceID mDevice = 0;;
-		SDL_TimerID mTimer = 0;
+		SDL_AudioDeviceID mDevice = 0;
+		uint32_t mDeviceFrequency = 0;
+		std::atomic_uint32_t mRemainingSamples = 0;
 
 		std::vector<float> mWaveform;
 		size_t mWaveformOffset = 0;
